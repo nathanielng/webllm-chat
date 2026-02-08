@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebGPU Chatbot - Apple Silicon</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            width: 100%;
+            max-width: 800px;
+            height: 90vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 24px;
+            margin-bottom: 8px;
+        }
+
+        .status {
+            font-size: 14px;
+            opacity: 0.9;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .status-indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #fbbf24;
+            animation: pulse 2s infinite;
+        }
+
+        .status-indicator.ready {
+            background: #10b981;
+            animation: none;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .chat-container {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            background: #f9fafb;
+        }
+
+        .message {
+            margin-bottom: 16px;
+            display: flex;
+            gap: 12px;
+            animation: slideIn 0.3s ease-out;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .message.user {
+            flex-direction: row-reverse;
+        }
+
+        .avatar {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            flex-shrink: 0;
+        }
+
+        .message.user .avatar {
+            background: #667eea;
+            color: white;
+        }
+
+        .message.assistant .avatar {
+            background: #10b981;
+            color: white;
+        }
+
+        .message-content {
+            max-width: 70%;
+            padding: 12px 16px;
+            border-radius: 12px;
+            line-height: 1.5;
+        }
+
+        .message.user .message-content {
+            background: #667eea;
+            color: white;
+            border-bottom-right-radius: 4px;
+        }
+
+        .message.assistant .message-content {
+            background: white;
+            color: #1f2937;
+            border-bottom-left-radius: 4px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+
+        .typing-indicator {
+            display: none;
+            align-items: center;
+            gap: 4px;
+            padding: 12px 16px;
+        }
+
+        .typing-indicator.active {
+            display: flex;
+        }
+
+        .typing-indicator span {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #9ca3af;
+            animation: typing 1.4s infinite;
+        }
+
+        .typing-indicator span:nth-child(2) {
+            animation-delay: 0.2s;
+        }
+
+        .typing-indicator span:nth-child(3) {
+            animation-delay: 0.4s;
+        }
+
+        @keyframes typing {
+            0%, 60%, 100% {
+                transform: translateY(0);
+            }
+            30% {
+                transform: translateY(-10px);
+            }
+        }
+
+        .input-container {
+            padding: 20px;
+            background: white;
+            border-top: 1px solid #e5e7eb;
+            display: flex;
+            gap: 12px;
+        }
+
+        #userInput {
+            flex: 1;
+            padding: 12px 16px;
+            border: 2px solid #e5e7eb;
+            border-radius: 24px;
+            font-size: 14px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        #userInput:focus {
+            border-color: #667eea;
+        }
+
+        #sendBtn {
+            padding: 12px 24px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 24px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        #sendBtn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+
+        #sendBtn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .progress-container {
+            padding: 12px 20px;
+            background: #fef3c7;
+            border-bottom: 1px solid #fcd34d;
+            display: none;
+        }
+
+        .progress-container.active {
+            display: block;
+        }
+
+        .progress-text {
+            font-size: 13px;
+            color: #92400e;
+            margin-bottom: 8px;
+        }
+
+        .progress-bar {
+            height: 6px;
+            background: #fde68a;
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #f59e0b, #d97706);
+            transition: width 0.3s;
+            width: 0%;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>WebGPU Chatbot</h1>
+            <div class="status">
+                <span class="status-indicator" id="statusIndicator"></span>
+                <span id="statusText">Initializing model...</span>
+            </div>
+        </div>
+
+        <div class="progress-container" id="progressContainer">
+            <div class="progress-text" id="progressText">Loading model...</div>
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill"></div>
+            </div>
+        </div>
+
+        <div class="chat-container" id="chatContainer">
+            <div class="message assistant">
+                <div class="avatar">AI</div>
+                <div class="message-content">
+                    👋 Hi! I'm running locally in your browser using WebGPU on Apple Silicon. How can I help you today?
+                </div>
+            </div>
+        </div>
+
+        <div class="input-container">
+            <input 
+                type="text" 
+                id="userInput" 
+                placeholder="Type your message..."
+                disabled
+            />
+            <button id="sendBtn" disabled>Send</button>
+        </div>
+    </div>
+
+    <script type="module">
+        import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.1.2';
+
+        // Configure environment
+        env.allowLocalModels = false;
+        env.useBrowserCache = true;
+
+        let generator = null;
+        let conversationHistory = [];
+        let usingWebGPU = false;
+
+        const chatContainer = document.getElementById('chatContainer');
+        const userInput = document.getElementById('userInput');
+        const sendBtn = document.getElementById('sendBtn');
+        const statusText = document.getElementById('statusText');
+        const statusIndicator = document.getElementById('statusIndicator');
+        const progressContainer = document.getElementById('progressContainer');
+        const progressText = document.getElementById('progressText');
+        const progressFill = document.getElementById('progressFill');
+
+        // Check WebGPU availability
+        async function checkWebGPU() {
+            if (!navigator.gpu) {
+                console.log('WebGPU not available in this browser');
+                return false;
+            }
+            
+            try {
+                const adapter = await navigator.gpu.requestAdapter();
+                if (!adapter) {
+                    console.log('No WebGPU adapter found');
+                    return false;
+                }
+                console.log('WebGPU is available');
+                return true;
+            } catch (error) {
+                console.log('WebGPU check failed:', error);
+                return false;
+            }
+        }
+
+        // Initialize model
+        async function initModel() {
+            try {
+                progressContainer.classList.add('active');
+                
+                // Check for WebGPU support
+                const hasWebGPU = await checkWebGPU();
+                
+                const modelConfig = {
+                    progress_callback: (progress) => {
+                        console.log('Progress:', progress);
+                        if (progress.status === 'downloading') {
+                            const percent = progress.loaded && progress.total 
+                                ? Math.round((progress.loaded / progress.total) * 100)
+                                : 0;
+                            progressFill.style.width = `${percent}%`;
+                            progressText.textContent = `Downloading model: ${percent}%`;
+                        } else if (progress.status === 'loading') {
+                            progressText.textContent = 'Loading model...';
+                            progressFill.style.width = '100%';
+                        } else if (progress.status === 'ready') {
+                            progressText.textContent = 'Model ready!';
+                        } else {
+                            progressText.textContent = progress.status || 'Processing...';
+                        }
+                    }
+                };
+
+                // Try WebGPU first if available
+                if (hasWebGPU) {
+                    try {
+                        console.log('Attempting to load model with WebGPU...');
+                        modelConfig.device = 'webgpu';
+                        modelConfig.dtype = 'fp32';
+                        
+                        generator = await pipeline(
+                            'text-generation',
+                            'onnx-community/Qwen2.5-1.5B-Instruct',
+                            modelConfig
+                        );
+                        
+                        usingWebGPU = true;
+                        statusText.textContent = 'Ready • WebGPU Enabled';
+                        console.log('Model loaded successfully with WebGPU');
+                    } catch (webgpuError) {
+                        console.warn('WebGPU failed, falling back to WASM:', webgpuError);
+                        // Fall through to WASM
+                        generator = null;
+                    }
+                }
+                
+                // Fallback to WASM if WebGPU failed or unavailable
+                if (!generator) {
+                    console.log('Loading model with WASM backend...');
+                    delete modelConfig.device;
+                    delete modelConfig.dtype;
+                    
+                    generator = await pipeline(
+                        'text-generation',
+                        'onnx-community/Qwen2.5-1.5B-Instruct',
+                        modelConfig
+                    );
+                    
+                    usingWebGPU = false;
+                    statusText.textContent = 'Ready • CPU Mode (WASM)';
+                    
+                    addMessage('assistant', 
+                        'ℹ️ Running in CPU mode (WASM). For better performance, enable WebGPU:\n\n' +
+                        '1. Chrome: Visit chrome://flags/#enable-unsafe-webgpu\n' +
+                        '2. Enable "Unsafe WebGPU"\n' +
+                        '3. Restart browser'
+                    );
+                }
+
+                progressContainer.classList.remove('active');
+                statusIndicator.classList.add('ready');
+                userInput.disabled = false;
+                sendBtn.disabled = false;
+                userInput.focus();
+
+            } catch (error) {
+                console.error('Error loading model:', error);
+                statusText.textContent = 'Error loading model';
+                progressContainer.classList.remove('active');
+                
+                let errorMsg = '❌ Failed to load the model. ';
+                
+                if (error.message && error.message.includes('Failed to fetch')) {
+                    errorMsg += 'Network error - please check your internet connection.';
+                } else if (error.message) {
+                    errorMsg += `Error: ${error.message}`;
+                } else {
+                    errorMsg += 'Please refresh the page and try again.';
+                }
+                
+                addMessage('assistant', errorMsg);
+            }
+        }
+
+        // Add message to chat
+        function addMessage(role, content) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${role}`;
+            
+            const avatar = document.createElement('div');
+            avatar.className = 'avatar';
+            avatar.textContent = role === 'user' ? 'U' : 'AI';
+            
+            const messageContent = document.createElement('div');
+            messageContent.className = 'message-content';
+            messageContent.textContent = content;
+            
+            messageDiv.appendChild(avatar);
+            messageDiv.appendChild(messageContent);
+            
+            chatContainer.appendChild(messageDiv);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        // Show/hide typing indicator
+        function setTyping(show) {
+            let indicator = document.querySelector('.typing-indicator');
+            
+            if (show && !indicator) {
+                indicator = document.createElement('div');
+                indicator.className = 'message assistant';
+                indicator.innerHTML = `
+                    <div class="avatar">AI</div>
+                    <div class="typing-indicator active">
+                        <span></span><span></span><span></span>
+                    </div>
+                `;
+                chatContainer.appendChild(indicator);
+                chatContainer.scrollTop = chatContainer.scrollHeight;
+            } else if (!show && indicator) {
+                indicator.remove();
+            }
+        }
+
+        // Generate response
+        async function generateResponse(userMessage) {
+            try {
+                setTyping(true);
+                
+                // Build conversation context
+                conversationHistory.push({ role: 'user', content: userMessage });
+                
+                // Format messages for Qwen
+                const messages = conversationHistory.map(msg => 
+                    `<|im_start|>${msg.role}\n${msg.content}<|im_end|>`
+                ).join('\n');
+                
+                const prompt = messages + '\n<|im_start|>assistant\n';
+                
+                // Generate response
+                const output = await generator(prompt, {
+                    max_new_tokens: 512,
+                    temperature: 0.7,
+                    top_p: 0.9,
+                    do_sample: true,
+                    return_full_text: false,
+                });
+
+                setTyping(false);
+                
+                let response = output[0].generated_text.trim();
+                
+                // Clean up response (remove any trailing tags)
+                response = response.split('<|im_end|>')[0].trim();
+                
+                conversationHistory.push({ role: 'assistant', content: response });
+                
+                // Keep conversation history manageable (last 10 messages)
+                if (conversationHistory.length > 10) {
+                    conversationHistory = conversationHistory.slice(-10);
+                }
+                
+                addMessage('assistant', response);
+                
+            } catch (error) {
+                setTyping(false);
+                console.error('Error generating response:', error);
+                addMessage('assistant', '❌ Sorry, I encountered an error generating a response.');
+            }
+        }
+
+        // Handle send
+        async function handleSend() {
+            const message = userInput.value.trim();
+            if (!message || !generator) return;
+
+            addMessage('user', message);
+            userInput.value = '';
+            sendBtn.disabled = true;
+            userInput.disabled = true;
+
+            await generateResponse(message);
+
+            sendBtn.disabled = false;
+            userInput.disabled = false;
+            userInput.focus();
+        }
+
+        // Event listeners
+        sendBtn.addEventListener('click', handleSend);
+        userInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                handleSend();
+            }
+        });
+
+        // Initialize on load
+        initModel();
+    </script>
+</body>
+</html>
